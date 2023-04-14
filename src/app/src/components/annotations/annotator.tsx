@@ -49,7 +49,9 @@ import FileModal from "./filemodal";
 import AnnotatorSettings from "./utils/annotatorsettings";
 import FormatTimerSeconds from "./utils/timer";
 import { RegisteredModel } from "./model";
-
+//New components
+import ApexAnalytics from "../apexanalytics";
+type VideoAnalyticsResults = Record<string, any[]>;
 type Point = [number, number];
 type MapType = L.DrawMap;
 type VideoFrameMetadata = {
@@ -148,6 +150,10 @@ interface AnnotatorState {
     opacity: number;
   };
   currAnnotationPlaybackId: number;
+  /* Video Analytics Tracking */
+  isAnalyticsMode: boolean;
+  videoAnalyticsResults: VideoAnalyticsResults;
+  currentFrame: number;
 }
 
 /**
@@ -246,6 +252,9 @@ export default class Annotator extends Component<
         },
       },
       currAnnotationPlaybackId: 0,
+      /* Video Analytics Tracking States*/
+      isAnalyticsMode: false,
+      videoAnalyticsResults: {},
     };
 
     this.toaster = new Toaster({}, {});
@@ -729,6 +738,7 @@ export default class Annotator extends Component<
       predictDone: 0,
       uiState: null,
       killVideoPrediction: false,
+      isAnalyticsMode: this.currentAsset.type === "video",
     });
   }
 
@@ -793,6 +803,16 @@ export default class Annotator extends Component<
              * @param {DOMHighResTimeStamp} now
              * @param {VideoFrameMetadata} metadata
              */
+            const videoAnalyticsResults = JSON.parse(
+              JSON.stringify(this.state.videoAnalyticsResults)
+            );
+            // console.log(videoAnalyticsResults)
+            videoAnalyticsResults[this.currentAsset.assetUrl] =
+              response.data.frames;
+            this.setState({
+              videoAnalyticsResults,
+              currentFrame: response.data.fps,
+            });
             const videoFrameCallback = (
               now: DOMHighResTimeStamp,
               metadata: VideoFrameMetadata
@@ -1562,6 +1582,7 @@ export default class Annotator extends Component<
                 this.setState(prevState => ({
                   imageListCollapsed: !prevState.imageListCollapsed,
                 }));
+                console.log(this.state.isAnalyticsMode)
               }}
             />
             <div
@@ -1574,6 +1595,20 @@ export default class Annotator extends Component<
               className={[isCollapsed, "image-bar"].join("")}
               id={"image-bar"}
             >
+            {this.state.isAnalyticsMode ? (
+              <ApexAnalytics
+                ref={ref => {
+                  this.imagebarRef = ref;
+                }}
+                /*Only visible assets should be shown */
+                analyticsResults={this.state.videoAnalyticsResults}
+                confidence={this.state.confidence}
+                currentVideoKey={this.currentAsset.assetUrl}
+                currentFrame={this.state.currentFrame}
+                callbacks={{ selectAssetCallback: this.selectAsset }}
+                {...this.props}
+                />
+              ) : (
               <ImageBar
                 ref={ref => {
                   this.imagebarRef = ref;
@@ -1582,7 +1617,8 @@ export default class Annotator extends Component<
                 assetList={visibleAssets}
                 callbacks={{ selectAssetCallback: this.selectAsset }}
                 {...this.props}
-              />
+                />
+              )}
             </Card>
           </div>
 
